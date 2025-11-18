@@ -2,7 +2,31 @@
 #include <NimBleKeyboard.h>
 #include "keymap.h" // 作成したキーマップヘッダをインクルード
 
-BleKeyboard bleKeyboard("HandyKey4VR");
+#ifdef RIGHT_HAND
+#define DEVICE_NAME "HandyKey4VR_R"
+// (もし右手が対称的な配線なら、このように素直な並びになる)
+const int physical_to_logical_map[ROWS][COLS] = {
+    // Col 0(D0), Col 1(D1), Col 2(D2), Col 3(D3)
+    { 4,  5,  6,  7 }, // Row 1 (D9)  -> logical_keymap[4] ('j') ～ [7] (';')
+    { 0,  1,  2,  3 }, // Row 0 (D10) -> logical_keymap[0] ('u') ～ [3] ('p')
+    { 8,  9, 10, -1 }  // Row 2 (D8)  -> logical_keymap[8] ('m') ～ [11] ('/')
+};
+#endif
+#ifdef LEFT_HAND
+#define DEVICE_NAME "HandyKey4VR_L"
+// (★左手の非対称な配線を、ここで吸収する *例*)
+// 例えば、物理(D10, D0)のキーが、論理マップの'a' (インデックス4) の場合
+// 例えば、物理(D10, D1)のキーが、論理マップの'q' (インデックス0) の場合
+const int physical_to_logical_map[ROWS][COLS] = {
+    // Col 0(D0), Col 1(D1), Col 2(D2), Col 3(D3)
+    { 7,  6,  5,  4 }, // Row 0 (D10) -> 'f', 'd', 's', 'a'
+    { 3,  2,  1,  0 }, // Row 1 (D9)  -> 'r', 'e', 'w', 'q'
+    { 9, 8, 10,  -1 }  // Row 2 (D8)  -> 'z','x','c',(なし)
+    // ※この並びは、あなたの実際の配線に合わせてください
+};
+#endif
+
+BleKeyboard bleKeyboard(DEVICE_NAME);
 
 // LED
 const int PinLED01 = LED_BUILTIN;
@@ -85,15 +109,28 @@ void processKeys()
     {
         for (int c = 0; c < COLS; c++)
         {
+// 1. 物理[r][c]から「論理インデックス」を取得
+            int logical_index = physical_to_logical_map[r][c];
 
+            // 2. インデックスが -1 (キーなし) の場合は、この交差点を無視
+            if (logical_index == -1)
+            {
+                continue; 
+            }
+
+            // 3. 論理キーマップから、送信すべき「キー文字」を取得
+            char key = keymap[logical_index];
             // 状態が変化したキーのみ処理する (前回と今回で状態が違う)
             if (currentKeyState[r][c] != prevKeyState[r][c])
             {
 
-                char key = keymap[r][c];
+                // char key = keymap[r][c];
 
                 if (currentKeyState[r][c])
                 {
+                    if(keyType[logical_index] == TS){
+                        continue;
+                    }
                     // 押された (Pressed)
                     Serial.print("Pressed: ");
                     Serial.print(key);
