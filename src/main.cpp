@@ -6,15 +6,15 @@
 // (もし右手が対称的な配線なら、このように素直な並びになる)
 const int physical_to_logical_map[ROWS][COLS] = {
     // Col 0(D0), Col 1(D1), Col 2(D2), Col 3(D3)
-    { 4,  5,  6,  7 }, // Row 1 (D9)  -> logical_keymap[4] ('j') ～ [7] (';')
-    { 0,  1,  2,  3 }, // Row 0 (D10) -> logical_keymap[0] ('u') ～ [3] ('p')
-    { 8,  9, 10, -1 }  // Row 2 (D8)  -> logical_keymap[8] ('m') ～ [11] ('/')
+    {4, 5, 6, 7},  // Row 1 (D9)  -> logical_keymap[4] ('j') ～ [7] (';')
+    {0, 1, 2, 3},  // Row 0 (D10) -> logical_keymap[0] ('u') ～ [3] ('p')
+    {8, 9, 10, -1} // Row 2 (D8)  -> logical_keymap[8] ('m') ～ [11] ('/')
 };
 const int physical_to_finger_map[ROWS][COLS] = {
-      { 1,  3,  5,  7 }, // Row 0 (Top)
-      { 1,  3,  5,  7 }, // Row 1 (Home)
-      { 1,  3,  5, -1 }  // Row 2 (Bottom)
-  };
+    {1, 3, 5, 7}, // Row 0 (Top)
+    {1, 3, 5, 7}, // Row 1 (Home)
+    {1, 3, 5, -1} // Row 2 (Bottom)
+};
 #endif
 #ifdef LEFT_HAND
 #define DEVICE_NAME "HandyKey4VR_L"
@@ -23,24 +23,24 @@ const int physical_to_finger_map[ROWS][COLS] = {
 // 例えば、物理(D10, D1)のキーが、論理マップの'q' (インデックス0) の場合
 const int physical_to_logical_map[ROWS][COLS] = {
     // Col 0(D0), Col 1(D1), Col 2(D2), Col 3(D3)
-    { 7,  6,  5,  4 }, // Row 0 (D10) -> 'f', 'd', 's', 'a'
-    { 3,  2,  1,  0 }, // Row 1 (D9)  -> 'r', 'e', 'w', 'q'
-    { 9, 8, 10,  -1 }  // Row 2 (D8)  -> 'z','x','c',(なし)
+    {7, 6, 5, 4},  // Row 0 (D10) -> 'f', 'd', 's', 'a'
+    {3, 2, 1, 0},  // Row 1 (D9)  -> 'r', 'e', 'w', 'q'
+    {9, 8, 10, -1} // Row 2 (D8)  -> 'z','x','c',(なし)
     // ※この並びは、あなたの実際の配線に合わせてください
 };
 const int physical_to_finger_map[ROWS][COLS] = {
-      { 6,  4,  2,  0 }, // Row 0
-      { 6,  4,  2,  0 }, // Row 1
-      { 6,  4,  2, -1 }  // Row 2
-  };
+    {0, 2, 4, 6}, // Row 0
+    {0, 2, 4, 6}, // Row 1
+    {0, 2, 4, -1} // Row 2
+};
 #endif
 
 // --- BLE カスタム通信設定 ---
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-BleKeyboard bleKeyboard(DEVICE_NAME,"HandyKey",100);
-NimBLECharacteristic* pFingerCharacteristic = nullptr;
+BleKeyboard bleKeyboard(DEVICE_NAME, "HandyKey", 100);
+NimBLECharacteristic *pFingerCharacteristic = nullptr;
 
 // LED
 const int PinLED01 = LED_BUILTIN;
@@ -53,6 +53,9 @@ const int rowPins[ROWS] = {D10, D9, D8};    // 行 (出力)
 bool currentKeyState[ROWS][COLS] = {false};
 bool prevKeyState[ROWS][COLS] = {false};
 
+// ★追加: 実際にPCへ送信中のキーコードを記憶する配列 (スタック防止用)
+uint8_t activeKeyCodes[ROWS][COLS] = {0};
+
 // --- 関数プロトタイプ ---
 void scanMatrix();
 void processKeys();
@@ -64,14 +67,15 @@ void sendFingerData(int fingerId);
  */
 void scanMatrix()
 {
-    for (int r = 0; r < ROWS; r++){
-        digitalWrite(rowPins[r], HIGH);// 1. 注目するROWピン(r)をHIGHにする
-        delayMicroseconds(50); // 50マイクロ秒// ピンの電圧が安定するのをわずかに待つ (重要)
-        for (int c = 0; c < COLS; c++)// 2. このROW(r)に接続されているCOLピン(c)の状態を読む
+    for (int r = 0; r < ROWS; r++)
+    {
+        digitalWrite(rowPins[r], HIGH); // 1. 注目するROWピン(r)をHIGHにする
+        delayMicroseconds(50);          // 50マイクロ秒// ピンの電圧が安定するのをわずかに待つ (重要)
+        for (int c = 0; c < COLS; c++)  // 2. このROW(r)に接続されているCOLピン(c)の状態を読む
         {
-            currentKeyState[r][c] = (digitalRead(colPins[c]) == HIGH);// INPUT_PULLDOWN: 押されるとHIGH == true
+            currentKeyState[r][c] = (digitalRead(colPins[c]) == HIGH); // INPUT_PULLDOWN: 押されるとHIGH == true
         }
-        digitalWrite(rowPins[r], LOW);// 3. 注目したROWピン(r)をLOWに戻す (次のスキャンのため)
+        digitalWrite(rowPins[r], LOW); // 3. 注目したROWピン(r)をLOWに戻す (次のスキャンのため)
     }
 }
 
@@ -83,76 +87,122 @@ void processKeys()
     if (!bleKeyboard.isConnected())
         return;
 
+    // レイヤーキーが押されているか確認してレイヤー切り替え
+    uint8_t curr_layer = 0;
+    // if (currentKeyState[2][1])
+    // {
+    //     curr_layer = 1;
+    //     Serial.printf("[r][c] = [%d][%d] , layer = %d\n", curr_layer);
+    // }
     for (int r = 0; r < ROWS; r++)
     {
         for (int c = 0; c < COLS; c++)
         {
-// 1. 物理[r][c]から「論理インデックス」を取得
-            int logical_index = physical_to_logical_map[r][c];
+            if (currentKeyState[r][c])
+            {
+                int logical_index = physical_to_logical_map[r][c];
+                if (logical_index != -1)
+                {
+                    // レイヤー0の定義を見て、KEY_FNならレイヤーを1にする
+                    if (keymap[0][logical_index] == KEY_FN)
+                    {
+                        curr_layer = 1;
+                    }
+                }
+            }
+        }
+    }
+    // デバッグ用 (必要に応じて)
+    if (curr_layer == 1)
+        Serial.println("Layer 1 Active");
 
+    // スキャン
+    for (int r = 0; r < ROWS; r++)
+    {
+        for (int c = 0; c < COLS; c++)
+        {
+            // 状態が変化していなければスキップ
+            if (currentKeyState[r][c] == prevKeyState[r][c])
+            {
+                continue;
+            }
+            // 1. 物理[r][c]から「論理インデックス」を取得
+            int logical_index = physical_to_logical_map[r][c];
             // 2. インデックスが -1 (キーなし) の場合は、この交差点を無視
             if (logical_index == -1)
-            {
-                continue; 
-            }
+                continue;
 
-            // 3. 論理キーマップから、送信すべき「キー文字」を取得
-            char key = keymap[logical_index];
-            // 状態が変化したキーのみ処理する (前回と今回で状態が違う)
-            if (currentKeyState[r][c] != prevKeyState[r][c])
+            // --- キーが押された (Pressed) ---
+            if (currentKeyState[r][c])
             {
-                if (currentKeyState[r][c])
+                if (keyType[logical_index] == TS)
+                { // タッチセンサは処理しない
+                    continue;
+                }
+                // 3. 論理キーマップから、送信すべき「キー文字」を取得
+                uint8_t code = keymap[curr_layer][logical_index];
+                if (code == KEY_FN)
                 {
-                    if(keyType[logical_index] == TS){//タッチセンサは処理しない
-                        continue;
-                    }
-                    else
-                    {
-                        // 指IDを取得
-                        int fingerId = physical_to_finger_map[r][c];
-
-                        if (fingerId != -1) {
-                            Serial.printf("Finger Input: %d (Row:%d, Col:%d)\n", fingerId, r, c);
-                            // ★ ここで指IDをBLE送信
-                            sendFingerData(fingerId);
-                        }
-
-                        // 押された (Pressed) キーを押す (押しっぱなしにする)
-                        Serial.printf("Pressed: %c (%d,%d)",key,r,c);
-                        bleKeyboard.press(key);
-                    }
                 }
                 else
                 {
-                    // 離された (Released)
-                    Serial.printf("Released: %c (%d,%d)",key,r,c);
-                    bleKeyboard.release(key);
+                    // Serial.printf("[r][c] = [%d][%d] , layer = %d\n", r,c,curr_layer);
+                    // 指IDを取得
+                    int fingerId = physical_to_finger_map[r][c];
+
+                    if (fingerId != -1)
+                    {
+                        Serial.printf("Finger Input: %d (Row:%d, Col:%d)\n", fingerId, r, c);
+                        // ★ ここで指IDをBLE送信
+                        sendFingerData(fingerId);
+                    }
+
+                    // 押された (Pressed) キーを押す (押しっぱなしにする)
+                    Serial.printf("Pressed: %c (%d,%d)\n", code, r, c);
+                    bleKeyboard.press(code);
+                    activeKeyCodes[r][c] = code; // ★重要: 何を送ったか記憶する
                 }
             }
-            prevKeyState[r][c] = currentKeyState[r][c];//状態更新
+            // --- キーが離された (Released) ---
+            else
+            {
+                if (keyType[logical_index] == TS)
+                    continue;
+                // ★重要: 現在のマップではなく「押した時に記憶したコード」を使ってReleaseする
+                uint8_t code = activeKeyCodes[r][c];
+                if (code != 0)
+                {
+                    Serial.printf("Released: %c (%d,%d)", code, r, c);
+                    bleKeyboard.release(code);
+                    activeKeyCodes[r][c] = 0;
+                }
+            }
+            prevKeyState[r][c] = currentKeyState[r][c]; // 状態更新
         }
     }
 }
 
 // ★ 指ID (0-7) を送信する関数
-void sendFingerData(int value) {
-    if (bleKeyboard.isConnected() && pFingerCharacteristic != nullptr) {
+void sendFingerData(int value)
+{
+    if (bleKeyboard.isConnected() && pFingerCharacteristic != nullptr)
+    {
         // 1バイト(uint8_t)として送信
-        uint8_t data = (uint8_t)value; 
+        uint8_t data = (uint8_t)value;
         pFingerCharacteristic->setValue(&data, 1);
-        pFingerCharacteristic->notify(); 
+        pFingerCharacteristic->notify();
     }
 }
 
-void setupBLECustomService() {
-    NimBLEServer* pServer = NimBLEDevice::getServer();
-    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+void setupBLECustomService()
+{
+    NimBLEServer *pServer = NimBLEDevice::getServer();
+    NimBLEService *pService = pServer->createService(SERVICE_UUID);
     pFingerCharacteristic = pService->createCharacteristic(
-                                CHARACTERISTIC_UUID,
-                                NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-                            );
+        CHARACTERISTIC_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
     pService->start();
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
 }
 
