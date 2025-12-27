@@ -56,11 +56,16 @@ bool prevKeyState[ROWS][COLS] = {false};
 // ★追加: 実際にPCへ送信中のキーコードを記憶する配列 (スタック防止用)
 uint8_t activeKeyCodes[ROWS][COLS] = {0};
 
+// ★追加: 指の状態管理用 (T, I, M, R, P)
+uint8_t currentFingerState[5] = {0}; // 0:OPEN, 1:TOUCH, 2:CLOSE
+uint8_t prevFingerState[5] = {0};
+
 // --- 関数プロトタイプ ---
 void scanMatrix();
 void processKeys();
+void processFingerStates(); // ★追加
 void setupBLECustomService();
-void sendFingerData(int fingerId);
+// void sendFingerData(int fingerId); // 削除あるいは使用しない
 
 /**
  * @brief キーマトリクスをスキャンし、現在の状態を currentKeyState に格納する
@@ -80,7 +85,92 @@ void scanMatrix()
 }
 
 /**
- * @brief キーの状態変化を検出し、BLE経由でキー送信を処理する
+ * @brief 指の状態(OPEN/TOUCH/CLOSE)を判定してBLE送信する
+ * データ形式: [Thumb, Index, Middle, Ring, Pinky] (5 bytes)
+ * 値: 0=OPEN, 1=TOUCH, 2=CLOSE
+ */
+void processFingerStates()
+{
+    if (!bleKeyboard.isConnected() || pFingerCharacteristic == nullptr)
+        return;
+
+    // 一時的な集計用配列
+    bool finger_ts_active[5] = {false};
+    bool finger_ks_active[5] = {false};
+
+    // 1. マトリクス全体を走査して、各指のTS/KS状態を集計
+    for (int r = 0; r < ROWS; r++)
+    {
+        for (int c = 0; c < COLS; c++)
+        {
+            int f_id = physical_to_finger_map[r][c];
+            if (f_id == -1) continue;
+
+            // Finger IDを配列インデックス(0-4)にマッピング
+            // Left(0,2,4,6) -> Index(1), Middle(2), Ring(3), Pinky(4)
+            // Right(1,3,5,7) -> Index(1), Middle(2), Ring(3), Pinky(4)
+            // Thumb(0)は常にOPENと仮定（または親指用のマップがあればそこに割り当たる）
+            int idx = (f_id / 2) + 1; 
+
+            if (idx >= 0 && idx < 5)
+            {
+                // キーが反応している(HIGH)場合
+                if (currentKeyState[r][c])
+                {
+                    int l_idx = physical_to_logical_map[r][c];
+                    if (l_idx != -1)
+                    {
+                        if (keyType[l_idx] == TS) finger_ts_active[idx] = true;
+                        if (keyType[l_idx] == KS) finger_ks_active[idx] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. 集計結果から状態を決定 (0:OPEN, 1:TOUCH, 2:CLOSE)
+    bool isChanged = false;
+    for (int i = 0; i < 5; i++)
+    {
+        uint8_t state = 0; // OPEN
+        if (finger_ks_active[i] && finger_ts_active[i])
+        {
+            state = 2; // CLOSE (KS & TS both active)
+        }
+        else if (finger_ts_active[i])
+        {
+            state = 1; // TOUCH (TS only)
+        }
+        // KSのみONの場合は定義がないためOPEN(0)またはTOUCH扱いとするが、
+        // プロンプト定義に従い「KS, TSともに反応」のみをCLOSEとするなら、ここは0で遷移なし。
+        // (通常メカニカルSWを押せばTSも反応するため、KS ONならCLOSEになることが多い)
+        
+        currentFingerState[i] = state;
+
+        if (currentFingerState[i] != prevFingerState[i])
+        {
+            isChanged = true;
+        }
+    }
+
+    // 3. 変化があれば送信
+    if (isChanged)
+    {
+        pFingerCharacteristic->setValue(currentFingerState, 5);
+        pFingerCharacteristic->notify();
+        
+        // デバッグ出力
+        Serial.printf("BLE Notify: %d %d %d %d %d\n", 
+            currentFingerState[0], currentFingerState[1], currentFingerState[2], 
+            currentFingerState[3], currentFingerState[4]);
+
+        // 状態更新
+        memcpy(prevFingerState, currentFingerState, 5);
+    }
+}
+
+/**
+ * @brief キーの状態変化を検出し、HIDキー送信を処理する
  */
 void processKeys()
 {
@@ -89,11 +179,6 @@ void processKeys()
 
     // レイヤーキーが押されているか確認してレイヤー切り替え
     uint8_t curr_layer = 0;
-    // if (currentKeyState[2][1])
-    // {
-    //     curr_layer = 1;
-    //     Serial.printf("[r][c] = [%d][%d] , layer = %d\n", curr_layer);
-    // }
     for (int r = 0; r < ROWS; r++)
     {
         for (int c = 0; c < COLS; c++)
@@ -112,9 +197,9 @@ void processKeys()
             }
         }
     }
-    // デバッグ用 (必要に応じて)
-    if (curr_layer == 1)
-        Serial.println("Layer 1 Active");
+    //     // デバッグ用 (必要に応じて)
+    // if (curr_layer == 1)
+    //     Serial.println("Layer 1 Active");
 
     // スキャン
     for (int r = 0; r < ROWS; r++)
@@ -136,7 +221,7 @@ void processKeys()
             if (currentKeyState[r][c])
             {
                 if (keyType[logical_index] == TS)
-                { // タッチセンサは処理しない
+                { // タッチセンサはHID入力としては処理しない
                     continue;
                 }
                 // 3. 論理キーマップから、送信すべき「キー文字」を取得
@@ -146,17 +231,19 @@ void processKeys()
                 }
                 else
                 {
-                    // Serial.printf("[r][c] = [%d][%d] , layer = %d\n", r,c,curr_layer);
+                    //======FOR VRC=======
+                    // 指IDの個別送信(sendFingerData)は削除し、processFingerStatesで一括送信する
                     // 指IDを取得
-                    int fingerId = physical_to_finger_map[r][c];
+                    // int fingerId = physical_to_finger_map[r][c];
 
-                    if (fingerId != -1)
-                    {
-                        Serial.printf("Finger Input: %d (Row:%d, Col:%d)\n", fingerId, r, c);
-                        // ★ ここで指IDをBLE送信
-                        sendFingerData(fingerId);
-                    }
-
+                    // if (fingerId != -1)
+                    // {
+                    //     Serial.printf("Finger Input: %d (Row:%d, Col:%d)\n", fingerId, r, c);
+                    //     // ★ ここで指IDをBLE送信
+                    //     sendFingerData(fingerId);
+                    // }
+                    //======FOR VRC=======
+                    
                     // 押された (Pressed) キーを押す (押しっぱなしにする)
                     Serial.printf("Pressed: %c (%d,%d)\n", code, r, c);
                     bleKeyboard.press(code);
@@ -172,7 +259,7 @@ void processKeys()
                 uint8_t code = activeKeyCodes[r][c];
                 if (code != 0)
                 {
-                    Serial.printf("Released: %c (%d,%d)", code, r, c);
+                    Serial.printf("Released: %c (%d,%d)\n", code, r, c);
                     bleKeyboard.release(code);
                     activeKeyCodes[r][c] = 0;
                 }
@@ -182,17 +269,17 @@ void processKeys()
     }
 }
 
-// ★ 指ID (0-7) を送信する関数
-void sendFingerData(int value)
-{
-    if (bleKeyboard.isConnected() && pFingerCharacteristic != nullptr)
-    {
-        // 1バイト(uint8_t)として送信
-        uint8_t data = (uint8_t)value;
-        pFingerCharacteristic->setValue(&data, 1);
-        pFingerCharacteristic->notify();
-    }
-}
+// // ★ 指ID (0-7) を送信する関数
+// void sendFingerData(int value)
+// {
+//     if (bleKeyboard.isConnected() && pFingerCharacteristic != nullptr)
+//     {
+//         // 1バイト(uint8_t)として送信
+//         uint8_t data = (uint8_t)value;
+//         pFingerCharacteristic->setValue(&data, 1);
+//         pFingerCharacteristic->notify();
+//     }
+// }
 
 void setupBLECustomService()
 {
@@ -229,6 +316,16 @@ void setup()
 
     bleKeyboard.begin();
     setupBLECustomService();
+    //==============================
+    // 3. アドバタイズ情報を更新して再開 (重要)
+    // NimBLEのアドバタイズインスタンスを取得
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    // 既存のHIDサービスに加えて、カスタムUUIDもリストに追加
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    // アドバタイズ設定を反映させるために停止＆再開（念のため）
+    pAdvertising->stop();
+    pAdvertising->start();
+    //==============================
     Serial.println("Waiting for BLE connection...");
 }
 
@@ -238,7 +335,8 @@ void loop()
     {
         digitalWrite(PinLED01, LOW);
         scanMatrix();
-        processKeys();
+        processFingerStates(); // ★指の状態変化をチェックして送信
+        processKeys();         // HIDキー入力を処理
         delay(10);
     }
     else
