@@ -95,7 +95,7 @@ PlatformIO を使用してビルド・書き込みを行います。
 | --- | --- | --- |
 | `HK4VR_R_seeed_xiao_esp32c6` | 右手用ファームウェア | `-D RIGHT_HAND` |
 | `HK4VR_L_seeed_xiao_esp32c6` | 左手用ファームウェア | `-D LEFT_HAND` |
-```
+
 ### コマンド例
 ```bash
 # 右手用をビルドして書き込み
