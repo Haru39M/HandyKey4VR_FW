@@ -3,6 +3,22 @@
 
 #ifdef RIGHT_HAND
 #define DEVICE_NAME "HandyKey4VR_R"
+
+// #define FINGER_ID_T 8 //Thumb
+// #define FINGER_ID_I 1 //Index
+// #define FINGER_ID_M 3 //Middle
+// #define FINGER_ID_R 5 //Ring
+// #define FINGER_ID_P 7 //Pinky
+
+enum FingerID{
+    FINGER_T = 8,//Thumb
+    FINGER_I = 1,//Index
+    FINGER_M = 3,//Middle
+    FINGER_R = 5,//Ring
+    FINGER_P = 7,//Pinky
+    FINGER_X = -1,//Not Finger
+};
+
 // (もし右手が対称的な配線なら、このように素直な並びになる)
 const int physical_to_logical_map[ROWS][COLS] = {
     // Col 0(D0), Col 1(D1), Col 2(D2), Col 3(D3)
@@ -11,13 +27,29 @@ const int physical_to_logical_map[ROWS][COLS] = {
     {8, 9, 10, -1} // Row 2 (D8)  -> logical_keymap[8] ('m') ～ [11] ('/')
 };
 const int physical_to_finger_map[ROWS][COLS] = {
-    {1, 3, 5, 7}, // Row 0 (Top)
-    {1, 3, 5, 7}, // Row 1 (Home)
-    {8, 8, 8, -1} // Row 2 (Bottom) ★修正: 親指(ID=8)として割り当て
+    {FINGER_I, FINGER_M, FINGER_R, FINGER_P}, // Row 0 (Top)
+    {FINGER_I, FINGER_M, FINGER_R, FINGER_P}, // Row 1 (Home)
+    {FINGER_T, FINGER_T, FINGER_T, FINGER_X} // Row 2 (Bottom) ★修正: 親指(ID=8)として割り当て
 };
 #endif
 #ifdef LEFT_HAND
 #define DEVICE_NAME "HandyKey4VR_L"
+
+// #define FINGER_ID_T 8 //Thumb
+// #define FINGER_ID_I 0 //Index
+// #define FINGER_ID_M 2 //Middle
+// #define FINGER_ID_R 4 //Ring
+// #define FINGER_ID_P 6 //Pinky
+
+enum FingerID{
+    FINGER_T = 8,//Thumb
+    FINGER_I = 0,//Index
+    FINGER_M = 2,//Middle
+    FINGER_R = 4,//Ring
+    FINGER_P = 6,//Pinky
+    FINGER_X = -1,//Not Finger
+};
+
 // (★左手の非対称な配線を、ここで吸収する *例*)
 // 例えば、物理(D10, D0)のキーが、論理マップの'a' (インデックス4) の場合
 // 例えば、物理(D10, D1)のキーが、論理マップの'q' (インデックス0) の場合
@@ -29,9 +61,9 @@ const int physical_to_logical_map[ROWS][COLS] = {
     // ※この並びは、あなたの実際の配線に合わせてください
 };
 const int physical_to_finger_map[ROWS][COLS] = {
-    {0, 2, 4, 6}, // Row 0
-    {0, 2, 4, 6}, // Row 1
-    {8, 8, 8, -1} // Row 2 ★修正: 親指(ID=8)として割り当て
+    {FINGER_I, FINGER_M, FINGER_R, FINGER_P}, // Row 0
+    {FINGER_I, FINGER_M, FINGER_R, FINGER_P}, // Row 1
+    {FINGER_T, FINGER_T, FINGER_T, FINGER_X} // Row 2 ★修正: 親指(ID=8)として割り当て
 };
 #endif
 
@@ -108,7 +140,7 @@ void processFingerStates()
         for (int c = 0; c < COLS; c++)
         {
             int f_id = physical_to_finger_map[r][c];
-            if (f_id == -1) continue;
+            if (f_id == FINGER_X) continue;
 
             // Finger IDを配列インデックス(0-4)にマッピング
             // Left(0,2,4,6) -> Index(1), Middle(2), Ring(3), Pinky(4)
@@ -117,7 +149,7 @@ void processFingerStates()
             
             // ★修正: 親指用ID(8)の場合はインデックス0、それ以外は計算式でマッピング
             int idx = -1;
-            if (f_id == 8) {
+            if (f_id == FINGER_T) {
                 idx = 0; // Thumb
             } else {
                 idx = (f_id / 2) + 1; 
@@ -247,7 +279,7 @@ void processKeys()
                     // 指IDを取得
                     // int fingerId = physical_to_finger_map[r][c];
 
-                    // if (fingerId != -1)
+                    // if (fingerId != FINGER_X)
                     // {
                     //     Serial.printf("Finger Input: %d (Row:%d, Col:%d)\n", fingerId, r, c);
                     //     // ★ ここで指IDをBLE送信
@@ -348,7 +380,7 @@ void loop()
         scanMatrix();
         processFingerStates(); // ★指の状態変化をチェックして送信
         processKeys();         // HIDキー入力を処理
-        delay(10);
+        delay(5);
     }
     else
     {
