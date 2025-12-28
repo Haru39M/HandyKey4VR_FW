@@ -94,7 +94,11 @@ uint8_t activeKeyCodes[ROWS][COLS] = {0};
 
 // ★追加: 指の状態管理用 (T, I, M, R, P)
 uint8_t currentFingerState[5] = {STATE_FINGER_OPEN}; // 0:OPEN, 1:TOUCH, 2:CLOSE
-uint8_t prevFingerState[5] = {STATE_FINGER_OPEN};
+uint8_t prevFingerState[5] = {STATE_FINGER_OPEN}; // 前回「送信した」状態を保持
+
+// ★追加: 送信間隔制御用
+unsigned long lastFingerSendTime = 0;
+const unsigned long FINGER_SEND_INTERVAL = 40; // 40ms間隔 (秒間25回程度に制限)
 
 // --- 関数プロトタイプ ---
 void scanMatrix();
@@ -190,14 +194,16 @@ void processFingerStates()
         
         currentFingerState[i] = state;
 
+        // 送信済みの状態(prevFingerState)と比較して変化があるか確認
         if (currentFingerState[i] != prevFingerState[i])
         {
             isChanged = true;
         }
     }
 
-    // 3. 変化があれば送信
-    if (isChanged)
+    // 3. 変化があり、かつ一定時間経過していれば送信
+    // ★修正: 送信頻度を制限(40ms)することで、受信側の処理落ちやチャタリングによるバタつきを防ぐ
+    if (isChanged && (millis() - lastFingerSendTime > FINGER_SEND_INTERVAL))
     {
         pFingerCharacteristic->setValue(currentFingerState, 5);
         pFingerCharacteristic->notify();
@@ -209,6 +215,7 @@ void processFingerStates()
 
         // 状態更新
         memcpy(prevFingerState, currentFingerState, 5);
+        lastFingerSendTime = millis();
     }
 }
 
