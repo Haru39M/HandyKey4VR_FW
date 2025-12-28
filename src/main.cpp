@@ -13,7 +13,7 @@ const int physical_to_logical_map[ROWS][COLS] = {
 const int physical_to_finger_map[ROWS][COLS] = {
     {1, 3, 5, 7}, // Row 0 (Top)
     {1, 3, 5, 7}, // Row 1 (Home)
-    {1, 3, 5, -1} // Row 2 (Bottom)
+    {8, 8, 8, -1} // Row 2 (Bottom) ★修正: 親指(ID=8)として割り当て
 };
 #endif
 #ifdef LEFT_HAND
@@ -31,7 +31,7 @@ const int physical_to_logical_map[ROWS][COLS] = {
 const int physical_to_finger_map[ROWS][COLS] = {
     {0, 2, 4, 6}, // Row 0
     {0, 2, 4, 6}, // Row 1
-    {0, 2, 4, -1} // Row 2
+    {8, 8, 8, -1} // Row 2 ★修正: 親指(ID=8)として割り当て
 };
 #endif
 
@@ -114,7 +114,14 @@ void processFingerStates()
             // Left(0,2,4,6) -> Index(1), Middle(2), Ring(3), Pinky(4)
             // Right(1,3,5,7) -> Index(1), Middle(2), Ring(3), Pinky(4)
             // Thumb(0)は常にOPENと仮定（または親指用のマップがあればそこに割り当たる）
-            int idx = (f_id / 2) + 1; 
+            
+            // ★修正: 親指用ID(8)の場合はインデックス0、それ以外は計算式でマッピング
+            int idx = -1;
+            if (f_id == 8) {
+                idx = 0; // Thumb
+            } else {
+                idx = (f_id / 2) + 1; 
+            }
 
             if (idx >= 0 && idx < 5)
             {
