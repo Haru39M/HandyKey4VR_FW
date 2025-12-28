@@ -56,9 +56,13 @@ bool prevKeyState[ROWS][COLS] = {false};
 // ★追加: 実際にPCへ送信中のキーコードを記憶する配列 (スタック防止用)
 uint8_t activeKeyCodes[ROWS][COLS] = {0};
 
+#define STATE_FINGER_OPEN 0
+#define STATE_FINGER_TOUCH 1
+#define STATE_FINGER_CLOSE 2
+
 // ★追加: 指の状態管理用 (T, I, M, R, P)
-uint8_t currentFingerState[5] = {0}; // 0:OPEN, 1:TOUCH, 2:CLOSE
-uint8_t prevFingerState[5] = {0};
+uint8_t currentFingerState[5] = {STATE_FINGER_OPEN}; // 0:OPEN, 1:TOUCH, 2:CLOSE
+uint8_t prevFingerState[5] = {STATE_FINGER_OPEN};
 
 // --- 関数プロトタイプ ---
 void scanMatrix();
@@ -132,14 +136,14 @@ void processFingerStates()
     bool isChanged = false;
     for (int i = 0; i < 5; i++)
     {
-        uint8_t state = 0; // OPEN
+        uint8_t state = STATE_FINGER_OPEN; // OPEN
         if (finger_ks_active[i] && finger_ts_active[i])
         {
-            state = 2; // CLOSE (KS & TS both active)
+            state = STATE_FINGER_CLOSE; // CLOSE (KS & TS both active)
         }
         else if (finger_ts_active[i])
         {
-            state = 1; // TOUCH (TS only)
+            state = STATE_FINGER_TOUCH; // TOUCH (TS only)
         }
         // KSのみONの場合は定義がないためOPEN(0)またはTOUCH扱いとするが、
         // プロンプト定義に従い「KS, TSともに反応」のみをCLOSEとするなら、ここは0で遷移なし。
