@@ -27,7 +27,7 @@ const uint8_t keymap[2][NUM_KEYS] = {
     {
         // layer 1
         'j', 'k', 'l', ';',                      // 論理的な2行目 (インデックス 4～7)
-        KEY_BACKSPACE, 0, KEY_SPACE, KEY_RETURN, // 論理的な1行目 (インデックス 0～3)
+        KEY_RETURN,KEY_SPACE, KEY_BACKSPACE, 0, // 論理的な1行目 (インデックス 0～3)
         KEY_FN, ',', '.', '/'                    // 論理的な3行目 (インデックス 8～11)
     }};
 const int keyType[NUM_KEYS] = {
@@ -51,7 +51,7 @@ const uint8_t keymap[2][NUM_KEYS] = {
     {
         // layer 1
         'q', 'w', 'e', 'r',                      // ROW 0
-        KEY_RETURN, KEY_SPACE, 0, KEY_BACKSPACE, // ROW 1
+        0,KEY_BACKSPACE, KEY_SPACE,KEY_RETURN, // ROW 1
         KEY_FN, 'x', 'c', 'v'                    // ROW 2
     }};
 const int keyType[NUM_KEYS] = {
